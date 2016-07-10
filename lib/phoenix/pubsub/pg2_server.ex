@@ -4,8 +4,8 @@ defmodule Phoenix.PubSub.PG2Server do
   use GenServer
   alias Phoenix.PubSub.Local
 
-  def start_link(server_name) do
-    GenServer.start_link __MODULE__, server_name, name: server_name
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, opts, name: Dict.fetch!(opts, :name))
   end
 
   def direct_broadcast(fastlane, server_name, pool_size, node_name, from_pid, topic, msg) do
@@ -38,19 +38,23 @@ defmodule Phoenix.PubSub.PG2Server do
     :ok
   end
 
-  def init(server_name) do
-    pg2_group = pg2_namespace(server_name)
+  def init(opts) do
+    state = %{name: Keyword.fetch!(opts, :name),
+              server_name: Keyword.fetch!(opts, :server_name),
+              fastlane: Keyword.fetch!(opts, :fastlane),
+              opts: opts}
+    pg2_group = pg2_namespace(state.server_name)
     :ok = :pg2.create(pg2_group)
     :ok = :pg2.join(pg2_group, self())
 
-    {:ok, server_name}
+    {:ok, state}
   end
 
-  def handle_info({:forward_to_local, fastlane, from_pid, pool_size, topic, msg}, name) do
+  def handle_info({:forward_to_local, fastlane, from_pid, pool_size, topic, msg}, state) do
     # The whole broadcast will happen inside the current process
     # but only for messages coming from the distributed system.
-    Local.broadcast(fastlane, name, pool_size, from_pid, topic, msg)
-    {:noreply, name}
+    Local.broadcast(fastlane || state.fastlane, state.name, pool_size, from_pid, topic, msg)
+    {:noreply, state}
   end
 
   defp get_members(server_name) do

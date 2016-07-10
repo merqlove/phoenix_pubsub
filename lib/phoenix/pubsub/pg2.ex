@@ -34,13 +34,15 @@ defmodule Phoenix.PubSub.PG2 do
     scheduler_count = :erlang.system_info(:schedulers)
     pool_size = Keyword.get(opts, :pool_size, scheduler_count)
     node_name = opts[:node_name]
-    dispatch_rules = [{:broadcast, Phoenix.PubSub.PG2Server, [opts[:fastlane], server, pool_size]},
-                      {:direct_broadcast, Phoenix.PubSub.PG2Server, [opts[:fastlane], server, pool_size]},
+    fastlane  = opts[:fastlane]
+    server_opts = [name: server, server_name: server, fastlane: fastlane]
+    dispatch_rules = [{:broadcast, Phoenix.PubSub.PG2Server, [fastlane, server, pool_size]},
+                      {:direct_broadcast, Phoenix.PubSub.PG2Server, [fastlane, server, pool_size]},
                       {:node_name, __MODULE__, [node_name]}]
 
     children = [
       supervisor(Phoenix.PubSub.LocalSupervisor, [server, pool_size, dispatch_rules]),
-      worker(Phoenix.PubSub.PG2Server, [server]),
+      worker(Phoenix.PubSub.PG2Server, [server_opts]),
     ]
 
     supervise children, strategy: :rest_for_one

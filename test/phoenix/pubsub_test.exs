@@ -108,10 +108,13 @@ defmodule Phoenix.PubSub.PubSubTest do
 
   test "fastlaning skips subscriber and sends directly to fastlane pid" do
     fastlane_pid = spawn_link fn -> :timer.sleep(:infinity) end
+    fastlane_pid2 = spawn_link fn -> :timer.sleep(:infinity) end
     parent = self()
     _some_subscriber = spawn_link fn ->
       PubSub.subscribe(__MODULE__, "topic1",
                        fastlane: {fastlane_pid, Serializer, ["intercepted"]})
+      PubSub.subscribe(__MODULE__, "topic2",
+                       fastlane: {fastlane_pid2, Serializer, ["intercepted"]})
       send(parent, :resume)
       :timer.sleep(:infinity)
     end
@@ -133,6 +136,18 @@ defmodule Phoenix.PubSub.PubSubTest do
 
     assert_receive %Broadcast{event: "intercepted", topic: "topic1", payload: %{}}
     assert Process.info(fastlane_pid)[:messages]
+           == [fastlaned, fastlaned] # no additional messages received
+
+    PubSub.subscribe(__MODULE__, "topic2",
+                     fastlane: {fastlane_pid2, Serializer, ["intercepted"]})
+    Phoenix.PubSub.PG2Server.broadcast(nil, __MODULE__, 1, :none, "topic2", %Broadcast{event: "intercepted", topic: "topic2", payload: %{}})
+
+    fastlaned2 = %Message{event: "fastlaned", topic: "topic2", payload: %{}}
+    refute_receive %Broadcast{}
+    refute_receive %Message{}
+    assert_receive {:fastlaned, %Broadcast{}}
+    assert Process.info(fastlane_pid2)[:messages] == [fastlaned2, fastlaned2]
+    assert Process.info(self())[:messages]
            == [fastlaned, fastlaned] # no additional messages received
   end
 end
